@@ -1,0 +1,50 @@
+name: oil-hermes-title
+version: 1.0.0
+manifest_version: 2
+api_version: 1
+license: MIT
+homepage: https://github.com/vc1235-ui/oil-hermes-title
+description: "会话标题实时命名（改编自 oil-oil/oil-codex-title）：每轮对话结束后由独立后台调用参考最近几轮内容更新标题，格式为「类别 emoji + 对象｜目标」。"
+author: "vc1235-ui · port of oil-oil/oil-codex-title"
+tags: [sessions, titles, automation, productivity]
+provides_hooks:
+  - post_llm_call
+capabilities:
+  - llm.model_override
+config_schema:
+  enabled:
+    type: bool
+    default: true
+    description: "总开关。关闭后 post_llm_call 不再发起任何命名调用（也可用 /oil-title pause 临时暂停）。"
+  history_turns:
+    type: int
+    default: 5
+    description: "参考最近多少轮有效对话。"
+  max_chars_per_turn:
+    type: int
+    default: 700
+    description: "每轮对话摘录给命名模型的字符上限（控制 token 消耗）。"
+  timeout:
+    type: int
+    default: 30
+    description: "命名模型调用超时（秒）。"
+  max_parallel_workers:
+    type: int
+    default: 2
+    description: "后台同时运行的命名调用上限（1-8）。"
+  confirm_skip_limit:
+    type: int
+    default: 2
+    description: "标题稳定后，允许连续跳过的纯确认轮数（好的/收到/继续）。"
+  min_user_chars:
+    type: int
+    default: 4
+    description: "用户消息短于此长度且不是实义需求时，跳过命名（不调用模型）。"
+  style:
+    type: str
+    default: ""
+    description: "追加到内置命名规则的自定义风格要求，例如“对象名用英文”。"
+  state_db_path:
+    type: str
+    default: ""
+    description: "覆盖 state.db 路径（默认按当前 profile 解析；多 profile 后端一般不需要改）。"
