@@ -23,15 +23,24 @@ BACKUP_DIRNAME = "title-backups"
 def select_sessions(
     rows: Iterable[Dict[str, Any]], *, days: int, now: float,
     include_user: bool = False, include_automation: bool = False,
-    min_messages: int = 2, limit: int = 0,
+    min_messages: int = 2, limit: int = 0, exclude: Sequence[str] = (),
 ) -> Tuple[List[Dict[str, Any]], Dict[str, int]]:
-    """按窗口与规则挑出待回填的会话 → (selected, skipped 原因计数)。"""
+    """按窗口与规则挑出待回填的会话 → (selected, skipped 原因计数)。
+
+    ``exclude``: 显式排除的会话 id —— 有些自动化会话（例如 cron 任务用
+    ``hermes chat --source cli`` 起的）在库里看不出自动化痕迹，只能靠 id 排除。
+    """
     cutoff = now - max(1, int(days)) * 86400
+    excluded = {str(item).strip() for item in exclude if str(item).strip()}
     selected: List[Dict[str, Any]] = []
     skipped: Counter = Counter()
     for row in rows or []:
+        session_id = str(row.get("id") or "")
         last_active = _as_float(row.get("last_active") or row.get("started_at"))
         if last_active < cutoff:          # 窗口外：不算"被跳过"，只是不在范围
+            continue
+        if session_id in excluded:
+            skipped["excluded"] += 1
             continue
         if row.get("archived") or row.get("hidden"):
             skipped["archived_or_hidden"] += 1

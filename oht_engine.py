@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import threading
 import time
 from dataclasses import dataclass
@@ -23,6 +24,25 @@ logger = logging.getLogger(__name__)
 
 # 无人在看的自动化会话不命名（省额度）
 _SKIP_SURFACES = frozenset({"cron", "kanban", "tool", "batch", "subagent", "oneshot"})
+_UNTRUTHY = frozenset({"", "0", "false", "no", "off", "none", "null"})
+
+
+def is_cron_session() -> bool:
+    """本回合是否由 cron 任务驱动。
+
+    ``platform`` 只反映 ``--source``：cron 任务用 ``hermes chat --source cli`` 起会话时
+    会伪装成普通 CLI 会话，所以必须另看 ``HERMES_CRON_SESSION``（cron 调度器设的会话
+    ContextVar，并会随环境传给子进程）。取不到就当普通会话处理。
+    """
+    value = ""
+    try:
+        from gateway.session_context import get_session_env
+        value = str(get_session_env("HERMES_CRON_SESSION", "") or "")
+    except Exception:
+        value = str(os.environ.get("HERMES_CRON_SESSION", "") or "")
+    return value.strip().lower() not in _UNTRUTHY
+
+
 _SEMAPHORE: Optional[threading.Semaphore] = None
 _SEMAPHORE_LIMIT = 0
 _SEMAPHORE_LOCK = threading.Lock()
@@ -197,6 +217,8 @@ def _handle_turn(ctx: Any, payload: Dict[str, Any]) -> None:
             return
         platform = str(payload.get("platform") or "").strip().lower()
         if platform in _SKIP_SURFACES:
+            return
+        if is_cron_session():
             return
         store = state_mod.StateStore(ctx)
         if store.paused():

@@ -64,6 +64,14 @@ def test_min_messages_archived_and_limit():
     assert [s["id"] for s in selected] == ["ok1"]
 
 
+def test_exclude_ids_are_skipped():
+    """cron 用 --source cli 起的会话在库里看不出自动化痕迹，只能按 id 排除。"""
+    rows = [row("croncli1", source="cli"), row("normal", source="cli")]
+    selected, skipped = select_sessions(rows, days=14, now=NOW, exclude=["croncli1", " ", ""])
+    assert [s["id"] for s in selected] == ["normal"]
+    assert skipped == {"excluded": 1}
+
+
 # ------------------------------------------------------------ 备份 / 回滚
 
 

@@ -160,7 +160,7 @@ Hermes 自带一次性的自动命名（首轮即时标题 + 一次模型升级�
 ## 开发与验证
 
 ```bash
-# 单测（41 个）—— 需要 Hermes 运行时可导入 hermes_state
+# 单测（44 个）—— 需要 Hermes 运行时可导入 hermes_state
 PYTHONPATH="$HOME/.hermes/hermes-agent" ~/.hermes/hermes-agent/venv/bin/python -m pytest tests/ -q
 
 # 插件契约自检（清单、导入、注册）
@@ -178,6 +178,9 @@ hermes plugins doctor . --ci
 
 ## 更新记录
 
+- **1.1.2** — 自动化会话识别补全：cron 任务用 `hermes chat --source cli` 起的会话 `platform=cli`，
+  原来的来源过滤看不到它，现在按 `HERMES_CRON_SESSION` 标记在实时钩子里跳过；
+  回填新增 `--exclude <id,id>` 用于排除这类"库里看不出自动化痕迹"的会话。
 - **1.1.1** — 修类别 emoji 校验：`⚙️` 是「U+2699 + VS16」两个码点，单码点比对会把合规标题
   误判成 `bad_emoji`（回填 21 条里有 6 条因此判失败）。现在按去 VS16 的前缀匹配，
   `⚙` 与 `⚙️` 都接受并归一化成表里的形式；补了覆盖全部类别的回归测试。

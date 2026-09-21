@@ -232,6 +232,22 @@ def test_hook_skips_automation_surfaces(hooked):
     assert hooked.llm.calls == []
 
 
+def test_is_cron_session_truthiness(monkeypatch):
+    from oht_engine import is_cron_session
+    monkeypatch.delenv("HERMES_CRON_SESSION", raising=False)
+    assert is_cron_session() is False
+    for value, expected in (("1", True), ("true", True), ("0", False), ("", False), ("false", False)):
+        monkeypatch.setenv("HERMES_CRON_SESSION", value)
+        assert is_cron_session() is expected, value
+
+
+def test_hook_skips_cron_spawned_cli_session(hooked, monkeypatch):
+    """cron 用 `hermes chat --source cli` 起会话时 platform=cli，必须靠 env 标记拦住。"""
+    monkeypatch.setenv("HERMES_CRON_SESSION", "1")
+    hook_of(hooked)(**_payload(platform="cli"))
+    assert hooked.llm.calls == []
+
+
 def test_hook_skips_confirmation_until_limit(hooked, db):
     hook_of(hooked)(**_payload())                       # 首次命名
     assert len(hooked.llm.calls) == 1

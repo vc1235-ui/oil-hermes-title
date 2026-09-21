@@ -179,7 +179,7 @@ def action_archive_preview(days: int, *, as_json: bool = False) -> str:
 
 def action_backfill(*, days: int = 14, apply: bool = False, include_user: bool = False,
                     include_automation: bool = False, limit: int = 0, min_messages: int = 2,
-                    as_json: bool = False) -> str:
+                    exclude: str = "", as_json: bool = False) -> str:
     """批量回填历史会话标题。默认只列范围（不调用模型），``apply=True`` 才真跑。"""
     ctx = _ctx()
     config = engine.load_config(ctx)
@@ -188,7 +188,8 @@ def action_backfill(*, days: int = 14, apply: bool = False, include_user: bool =
     rows = db.list_sessions_rich(limit=5000, order_by_last_active=True)
     selected, skipped = backfill.select_sessions(
         rows, days=days, now=time.time(), include_user=include_user,
-        include_automation=include_automation, min_messages=min_messages, limit=limit)
+        include_automation=include_automation, min_messages=min_messages, limit=limit,
+        exclude=[item for item in str(exclude or "").split(",") if item.strip()])
 
     if not apply:
         if as_json:
@@ -331,6 +332,9 @@ def _setup_argparse(subparser) -> None:
                               help="连 cron/kanban/tool/oneshot 等自动化会话一起改（默认跳过）")
     backfill_cmd.add_argument("--limit", type=int, default=0, help="最多处理多少条（0 = 不限）")
     backfill_cmd.add_argument("--min-messages", type=int, default=2, help="消息数下限，默认 2")
+    backfill_cmd.add_argument("--exclude", default="",
+                              help="显式排除的会话 id（逗号分隔）—— cron 用 --source cli 起的会话"
+                                   "在库里看不出自动化痕迹，只能这样排除")
     backfill_cmd.add_argument("--json", action="store_true", help="输出 JSON")
 
     restore_cmd = subs.add_parser("restore", help="按备份回滚标题（不给 --file 时列出备份）")
@@ -386,7 +390,8 @@ def _handle_cli(args) -> int:
         if command == "backfill":
             print(action_backfill(days=args.days, apply=args.apply, include_user=args.include_user,
                                   include_automation=args.include_automation, limit=args.limit,
-                                  min_messages=args.min_messages, as_json=args.json))
+                                  min_messages=args.min_messages,
+                                  exclude=getattr(args, "exclude", "") or "", as_json=args.json))
             return 0
         if command == "restore":
             print(action_restore(getattr(args, "file", "") or "", apply=args.apply, as_json=args.json))
