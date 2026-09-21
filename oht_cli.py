@@ -23,6 +23,8 @@ from . import oht_store as store_mod
 
 _CTX: Any = None
 
+_SESSION_HELP = "会话 id / 前缀 / 标题（默认读 HERMES_SESSION_ID）"
+
 
 def bind_context(ctx: Any) -> None:
     """由 register() 调用，供 CLI / 斜杠命令复用同一份插件上下文。"""
@@ -212,7 +214,7 @@ def action_doctor() -> str:
 
 
 def _setup_argparse(subparser) -> None:
-    subparser.add_argument("--session", default="", help="会话 id / 前缀 / 标题（默认读 HERMES_SESSION_ID）")
+    subparser.add_argument("--session", default="", help=_SESSION_HELP)
     subs = subparser.add_subparsers(dest="oil_title_command")
 
     subs.add_parser("status", help="显示开关、配置与当前会话标题状态")
@@ -240,6 +242,11 @@ def _setup_argparse(subparser) -> None:
     archive.add_argument("--json", action="store_true", help="输出 JSON")
 
     subs.add_parser("doctor", help="自检")
+
+    # ``--session`` 在父 parser 与每个子命令上都可用：``hermes oil-title --session X lock``
+    # 与 ``hermes oil-title lock --session X`` 都成立（SUPPRESS 保证子命令不覆盖父级已解析的值）。
+    for _child in subs.choices.values():
+        _child.add_argument("--session", default=argparse.SUPPRESS, help=_SESSION_HELP)
 
     subparser.set_defaults(func=_handle_cli)
 
