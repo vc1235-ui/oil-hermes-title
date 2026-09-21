@@ -56,6 +56,7 @@ hermes oil-title status                         # 开关、配置、当前会话
 - 「暂停自动命名。」/「恢复自动命名。」→ `pause` / `resume`
 - 「看下命名用量。」→ `usage [--days 7]`
 - 「预览可以归档的闲置话题。」→ `archive-preview [--days 3]`
+- 「把近 14 天的会话标题都按规则整理一遍。」→ `backfill --days 14`（先看范围，确认后加 `--apply`）
 
 **斜杠命令**（CLI / 桌面 / gateway 会话内可用，不需要会话 id 的动作）：
 
@@ -75,6 +76,8 @@ hermes oil-title unlock  --session <id>
 hermes oil-title pause | resume
 hermes oil-title usage   [--days 7] [--json]
 hermes oil-title archive-preview [--days 3] [--json]
+hermes oil-title backfill [--days 14] [--apply] [--include-user] [--include-automation]
+hermes oil-title restore [--file <备份.json>] [--apply]
 hermes oil-title doctor
 ```
 
@@ -157,7 +160,7 @@ Hermes 自带一次性的自动命名（首轮即时标题 + 一次模型升级�
 ## 开发与验证
 
 ```bash
-# 单测（32 个）—— 需要 Hermes 运行时可导入 hermes_state
+# 单测（39 个）—— 需要 Hermes 运行时可导入 hermes_state
 PYTHONPATH="$HOME/.hermes/hermes-agent" ~/.hermes/hermes-agent/venv/bin/python -m pytest tests/ -q
 
 # 插件契约自检（清单、导入、注册）
@@ -175,6 +178,8 @@ hermes plugins doctor . --ci
 
 ## 更新记录
 
+- **1.1.0** — 新增 `backfill`（批量回填历史会话标题，默认不调模型的范围预览 + 执行前自动备份 +
+  默认保护 `user` 权限标题与自动化会话）与 `restore`（按备份回滚，标题文字与权限都还原）。
 - **1.0.1** — 修 `--session` 只挂在父 parser 上的问题：`hermes oil-title lock --session X`
   会被 argparse 拒绝（README/SKILL 示例正是这个写法）。现在子命令前后都接受 `--session`，
   并补了解析回归测试（`tests/test_cli.py`）。

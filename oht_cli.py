@@ -15,8 +15,10 @@ import json
 import os
 import time
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from . import oht_backfill as backfill
 from . import oht_engine as engine
 from . import oht_state as state_mod
 from . import oht_store as store_mod
@@ -175,6 +177,83 @@ def action_archive_preview(days: int, *, as_json: bool = False) -> str:
     return "\n".join(lines)
 
 
+def action_backfill(*, days: int = 14, apply: bool = False, include_user: bool = False,
+                    include_automation: bool = False, limit: int = 0, min_messages: int = 2,
+                    as_json: bool = False) -> str:
+    """批量回填历史会话标题。默认只列范围（不调用模型），``apply=True`` 才真跑。"""
+    ctx = _ctx()
+    config = engine.load_config(ctx)
+    db = _db()
+    store = state_mod.StateStore(ctx)
+    rows = db.list_sessions_rich(limit=5000, order_by_last_active=True)
+    selected, skipped = backfill.select_sessions(
+        rows, days=days, now=time.time(), include_user=include_user,
+        include_automation=include_automation, min_messages=min_messages, limit=limit)
+
+    if not apply:
+        if as_json:
+            return json.dumps({"days": days, "selected": selected, "skipped": skipped},
+                              ensure_ascii=False, indent=2)
+        return backfill.describe_selection(selected, skipped, days=days, include_user=include_user,
+                                           include_automation=include_automation)
+
+    if not selected:
+        return "没有需要回填的会话（范围预览见 `hermes oil-title backfill`）。"
+
+    backup_path = backfill.backup_titles(db, selected, store.data_dir)
+    lines: List[str] = []
+
+    def _progress(index: int, total: int, change: Dict[str, Any]) -> None:
+        lines.append(f"[{index}/{total}] {change['status']:>16}  {change['id']}  "
+                     f"{change['from'] or '(未命名)'} → {change['to'] or '-'}")
+
+    result = backfill.run_backfill(ctx, db, selected, config=config, progress=_progress)
+    if as_json:
+        return json.dumps({"backup": str(backup_path), **result}, ensure_ascii=False, indent=2)
+    lines.append("")
+    lines.append(f"回填 {result['total']} 条，耗时 {result['duration_s']}s；"
+                 f"结果：{'、'.join(f'{k}×{v}' for k, v in sorted(result['statuses'].items()))}")
+    lines.append(f"标题备份：{backup_path}")
+    lines.append(f"回滚：hermes oil-title restore --file {backup_path} --apply")
+    lines.append("用量：hermes oil-title usage")
+    return "\n".join(lines)
+
+
+def action_restore(path: str = "", *, apply: bool = False, as_json: bool = False) -> str:
+    """回滚标题。不给 --file 时列出已有备份。"""
+    db = _db()
+    store = state_mod.StateStore(_ctx())
+    directory = store.data_dir / backfill.BACKUP_DIRNAME
+    if not path:
+        if not directory.exists():
+            return f"还没有标题备份：{directory}"
+        files = sorted(directory.glob("*.json"), reverse=True)
+        if not files:
+            return f"还没有标题备份：{directory}"
+        return "可用备份（新的在前）：\n" + "\n".join(
+            f"  · {p.name}  {p.stat().st_size} bytes" for p in files[:15]) + \
+            "\n回滚： hermes oil-title restore --file <备份路径> --apply"
+    backup = backfill.load_backup(Path(path))
+    if not apply:
+        plan = []
+        for session_id, record in (backup.get("sessions") or {}).items():
+            current, _ = store_mod.read_title(db, session_id)
+            want = (record or {}).get("title")
+            if current != want:
+                plan.append({"id": session_id, "current": current, "restore": want})
+        if as_json:
+            return json.dumps({"file": path, "changes": plan}, ensure_ascii=False, indent=2)
+        if not plan:
+            return f"{path}：所有会话标题与备份一致，无需回滚。"
+        return (f"{path}：{len(plan)} 条会被还原（仅预览）：\n"
+                + "\n".join(f"  · {c['id']}  {c['current']!r} → {c['restore']!r}" for c in plan[:25])
+                + f"\n执行： hermes oil-title restore --file {path} --apply")
+    stats = backfill.restore_titles(db, backup)
+    if as_json:
+        return json.dumps({"file": path, "stats": stats}, ensure_ascii=False, indent=2)
+    return f"回滚完成：{'、'.join(f'{k}×{v}' for k, v in sorted(stats.items()))}"
+
+
 def action_doctor() -> str:
     ctx = _ctx()
     config = engine.load_config(ctx)
@@ -243,6 +322,22 @@ def _setup_argparse(subparser) -> None:
 
     subs.add_parser("doctor", help="自检")
 
+    backfill_cmd = subs.add_parser("backfill", help="批量回填历史会话标题（默认只列范围，不调用模型）")
+    backfill_cmd.add_argument("--days", type=int, default=14, help="时间窗口，默认 14 天")
+    backfill_cmd.add_argument("--apply", action="store_true", help="真的执行（先自动写标题备份）")
+    backfill_cmd.add_argument("--include-user", action="store_true",
+                              help="连 user 权限标题一起改（默认保护，不覆盖用户自己的命名）")
+    backfill_cmd.add_argument("--include-automation", action="store_true",
+                              help="连 cron/kanban/tool/oneshot 等自动化会话一起改（默认跳过）")
+    backfill_cmd.add_argument("--limit", type=int, default=0, help="最多处理多少条（0 = 不限）")
+    backfill_cmd.add_argument("--min-messages", type=int, default=2, help="消息数下限，默认 2")
+    backfill_cmd.add_argument("--json", action="store_true", help="输出 JSON")
+
+    restore_cmd = subs.add_parser("restore", help="按备份回滚标题（不给 --file 时列出备份）")
+    restore_cmd.add_argument("--file", default="", help="标题备份 JSON 路径")
+    restore_cmd.add_argument("--apply", action="store_true", help="真的写回（默认只预览差异）")
+    restore_cmd.add_argument("--json", action="store_true", help="输出 JSON")
+
     # ``--session`` 在父 parser 与每个子命令上都可用：``hermes oil-title --session X lock``
     # 与 ``hermes oil-title lock --session X`` 都成立（SUPPRESS 保证子命令不覆盖父级已解析的值）。
     for _child in subs.choices.values():
@@ -288,13 +383,22 @@ def _handle_cli(args) -> int:
         if command == "doctor":
             print(action_doctor())
             return 0
+        if command == "backfill":
+            print(action_backfill(days=args.days, apply=args.apply, include_user=args.include_user,
+                                  include_automation=args.include_automation, limit=args.limit,
+                                  min_messages=args.min_messages, as_json=args.json))
+            return 0
+        if command == "restore":
+            print(action_restore(getattr(args, "file", "") or "", apply=args.apply, as_json=args.json))
+            return 0
     except SystemExit as exc:
         print(str(exc))
         return 1
     except Exception as exc:
         print(f"oil-hermes-title: {exc}")
         return 1
-    print("用法：hermes oil-title <status|preview|apply|rename|lock|unlock|pause|resume|usage|archive-preview|doctor>")
+    print("用法：hermes oil-title <status|preview|apply|rename|lock|unlock|pause|resume|usage|"
+          "archive-preview|backfill|restore|doctor>")
     return 1
 
 

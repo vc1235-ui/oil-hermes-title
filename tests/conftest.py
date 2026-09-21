@@ -23,5 +23,5 @@ if PKG_NAME not in sys.modules:
     _spec.loader.exec_module(_pkg)
 
 # 短名别名：测试里直接 `from oht_store import ...` 即可
-for _name in ("oht_rules", "oht_store", "oht_state", "oht_naming", "oht_engine", "oht_cli"):
+for _name in ("oht_rules", "oht_store", "oht_state", "oht_naming", "oht_engine", "oht_cli", "oht_backfill"):
     sys.modules[_name] = importlib.import_module(f"{PKG_NAME}.{_name}")

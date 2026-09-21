@@ -31,6 +31,8 @@ metadata:
 | 「恢复自动命名」 | `hermes oil-title resume` |
 | 「看下命名用量」 | `hermes oil-title usage [--days 7]` |
 | 「预览可以归档的闲置话题」 | `hermes oil-title archive-preview [--days 3]` |
+| 「把近 N 天的会话标题都整理一遍」 | 先 `hermes oil-title backfill --days N` 看范围 → **报给用户确认** → 再 `--apply` |
+| 「标题改乱了，回滚」 | `hermes oil-title restore`（列备份）→ `hermes oil-title restore --file <备份> --apply` |
 | 「检查标题功能是否正常」 | `hermes oil-title doctor` |
 
 `preview` / `apply` / `lock` / `unlock` / `rename` 都是单会话动作；`pause` / `resume` /
@@ -40,6 +42,8 @@ metadata:
 
 - 把命令输出转述给用户，不要贴原始 JSON（除用户要 `--json`）。
 - `preview` 之后必须等用户确认再 `apply`；不要自作主张写入标题。
+- `backfill` 是**批量改写**：必须先用不带 `--apply` 的形式列出范围并把数字报给用户，得到明确同意再 `--apply`。
+  默认不要加 `--include-user`（那会覆盖用户自己起的标题）和 `--include-automation`（cron/oneshot 等噪音）。
 - `archive-preview` 只是预览。真正归档用 `hermes sessions archive`，并且**先跟用户确认**。
 
 ## 内置行为（不用你去调用）

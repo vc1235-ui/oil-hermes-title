@@ -63,7 +63,11 @@ class StateStore:
     # ---- 用量账本 ----
     @property
     def usage_dir(self) -> Path:
-        return Path(self._state.data_dir) / "usage"
+        return self.data_dir / "usage"
+
+    @property
+    def data_dir(self) -> Path:
+        return Path(self._state.data_dir)
 
     def ledger_append(self, entry: Dict[str, Any]) -> None:
         try:
