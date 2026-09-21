@@ -78,6 +78,9 @@ hermes oil-title archive-preview [--days 3] [--json]
 hermes oil-title doctor
 ```
 
+`--session <id>` 放在子命令前或后都行（`hermes oil-title --session X lock` = `hermes oil-title lock --session X`）；
+不带就取环境变量 `HERMES_SESSION_ID`，也就是 Agent 在会话内调用时自动指向当前会话。
+
 ## 配置
 
 写在 `~/.hermes/config.yaml`，或用 `hermes oil-title` 之外的方式直接编辑后重载：
@@ -154,17 +157,29 @@ Hermes 自带一次性的自动命名（首轮即时标题 + 一次模型升级�
 ## 开发与验证
 
 ```bash
-# 单测（29 个）—— 需要 Hermes 运行时可导入 hermes_state
+# 单测（32 个）—— 需要 Hermes 运行时可导入 hermes_state
 PYTHONPATH="$HOME/.hermes/hermes-agent" ~/.hermes/hermes-agent/venv/bin/python -m pytest tests/ -q
 
 # 插件契约自检（清单、导入、注册）
 hermes plugins doctor . --ci
 ```
 
-验证记录（本机实测，2026-09）：插件在真实进程里注册成功（`1 hook`）；
-真实回合里 `post_llm_call` 触发（`agent.log`: `已排入后台命名（session=… platform=cli）`）；
-真实模型调用把标题写成 `🎨 登录页｜响应式布局与提交 loading`，第二轮话题变化后改成
-`🔎 向量数据库｜pgvector 与 Milvus 选型`，用户手动标题后被正确拦住（`locked`）。
+验证记录（2026-09，default profile 实装实测）：
+
+1. 结构：`hermes plugins doctor ~/.hermes/plugins/oil-hermes-title --ci` → manifest/import/注册全通过（1 hook）。
+2. 触发：真实交互会话里 `agent.log` 出现 `已排入后台命名（session=… platform=cli）`，
+   2.3 秒后写入 `🔎 Redis vs Memcached｜持久化机制对比 (applied)`。
+3. 换话题（关键回归）：第二轮标题改成 `🔎 pgvector vs Milvus｜向量库选型 (applied)` ——
+   「已有 `llm` 标题仍可被后续回合重写」这条降级路径在真实环境成立。
+4. 固定：`hermes oil-title lock` 之后再换话题 → `(locked)`，标题不动、`source=user`、未调用模型。
+
+## 更新记录
+
+- **1.0.1** — 修 `--session` 只挂在父 parser 上的问题：`hermes oil-title lock --session X`
+  会被 argparse 拒绝（README/SKILL 示例正是这个写法）。现在子命令前后都接受 `--session`，
+  并补了解析回归测试（`tests/test_cli.py`）。
+- **1.0.0** — 首个版本：`post_llm_call` 后台命名、emoji 类别与稳定性规则、
+  预览/采用/固定/暂停/用量/归档预览、权限感知写入、用量账本。
 
 ## 许可
 
