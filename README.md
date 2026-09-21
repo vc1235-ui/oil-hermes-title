@@ -160,7 +160,7 @@ Hermes 自带一次性的自动命名（首轮即时标题 + 一次模型升级�
 ## 开发与验证
 
 ```bash
-# 单测（39 个）—— 需要 Hermes 运行时可导入 hermes_state
+# 单测（41 个）—— 需要 Hermes 运行时可导入 hermes_state
 PYTHONPATH="$HOME/.hermes/hermes-agent" ~/.hermes/hermes-agent/venv/bin/python -m pytest tests/ -q
 
 # 插件契约自检（清单、导入、注册）
@@ -178,6 +178,10 @@ hermes plugins doctor . --ci
 
 ## 更新记录
 
+- **1.1.1** — 修类别 emoji 校验：`⚙️` 是「U+2699 + VS16」两个码点，单码点比对会把合规标题
+  误判成 `bad_emoji`（回填 21 条里有 6 条因此判失败）。现在按去 VS16 的前缀匹配，
+  `⚙` 与 `⚙️` 都接受并归一化成表里的形式；补了覆盖全部类别的回归测试。
+  命名规则同时明确：标题格式不一致时允许一次性迁移（内容准确也要给合规版本）。
 - **1.1.0** — 新增 `backfill`（批量回填历史会话标题，默认不调模型的范围预览 + 执行前自动备份 +
   默认保护 `user` 权限标题与自动化会话）与 `restore`（按备份回滚，标题文字与权限都还原）。
 - **1.0.1** — 修 `--session` 只挂在父 parser 上的问题：`hermes oil-title lock --session X`

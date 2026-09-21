@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from oht_rules import (  # noqa: E402
+    CATEGORY_EMOJI,
     MAX_TITLE_CHARS,
     clean_candidate,
     fingerprint,
@@ -11,6 +12,7 @@ from oht_rules import (  # noqa: E402
     is_pure_confirmation,
     is_titleable,
     iter_recent_turns,
+    match_category,
     recent_user_texts,
     validate_title,
 )
@@ -64,6 +66,25 @@ def test_validate_title():
     assert validate_title("🧩 登录表单｜")[1] == "empty_part"
     assert validate_title("")[1] == "empty"
     assert validate_title("🧩 " + "长" * (MAX_TITLE_CHARS + 5) + "｜目标")[1].startswith("too_long")
+
+
+def test_every_category_emoji_validates():
+    """回归：⚙️ 是「U+2699 + VS16」两码点，曾经被单码点比对判成 bad_emoji。"""
+    for emoji in CATEGORY_EMOJI:
+        title, reason = validate_title(f"{emoji} 对象名｜目标")
+        assert reason == "ok", (emoji, reason)
+        assert title == f"{emoji} 对象名｜目标"
+
+
+def test_vs16_variants_normalize_to_canonical():
+    # 模型可能写不带变体选择符的 ⚙，也要认，并归一化成表里的形式
+    assert validate_title("⚙ 环境｜配置")[0] == "⚙️ 环境｜配置"
+    assert validate_title("⚙️ 环境｜配置")[0] == "⚙️ 环境｜配置"
+    assert match_category("⚙ taskbroad 插件") == ("⚙️", "taskbroad 插件")
+    assert match_category("🧩 登录表单") == ("🧩", "登录表单")
+    assert match_category("没有 emoji") == (None, "没有 emoji")
+    # 别把普通字符误判成 emoji
+    assert validate_title("OK 对象｜目标")[1].startswith("bad_emoji")
 
 
 def test_clean_candidate():

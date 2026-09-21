@@ -17,11 +17,34 @@ CATEGORY_EMOJI = {
     "⚙️": "环境配置",
     "💬": "一般讨论",
 }
-EMOJI_SET = frozenset(CATEGORY_EMOJI)
+EMOJI_SET = frozenset(CATEGORY_EMOJI)   # 对外保留：类别全集（含多码点 emoji，勿用单字符比对）
 
 SEPARATOR = "｜"          # 全角竖线，恰好一个
 MAX_TITLE_CHARS = 60      # 低于 Hermes 的 100 上限，给 "#N" 去重后缀留空间
 MAX_EXCERPT_TURNS = 12
+_VS16 = "\ufe0f"          # 变体选择符：⚙️ 这类 emoji 是「基字符 + VS16」两个码点
+
+
+def _strip_vs16(text: str) -> str:
+    return text.replace(_VS16, "")
+
+
+# 类别 emoji 比对表：去掉 VS16 后再比（长度降序，避免前缀互相吃掉）。
+# 必须这样比 —— "⚙️" 长度是 2，直接拿 title[0] 去比对会永远失配。
+_EMOJI_PREFIXES = sorted(((_strip_vs16(emoji), emoji) for emoji in CATEGORY_EMOJI),
+                         key=lambda pair: len(pair[0]), reverse=True)
+
+
+def match_category(text: str) -> Tuple[Optional[str], str]:
+    """从标题开头认出类别 emoji → (规范 emoji | None, 去掉 emoji 后的剩余部分)。
+
+    接受 ``⚙`` 与 ``⚙️`` 两种写法，都归一化成表里的规范形式。
+    """
+    stripped = _strip_vs16(text)
+    for bare, canonical in _EMOJI_PREFIXES:
+        if bare and stripped.startswith(bare):
+            return canonical, stripped[len(bare):].strip()
+    return None, stripped.strip()
 
 # 纯确认（不构成新的主要目标）
 CONFIRM_PHRASES = frozenset({
@@ -142,10 +165,9 @@ def validate_title(raw: Any) -> Tuple[Optional[str], str]:
     head, tail = (part.strip() for part in title.split(SEPARATOR))
     if not head or not tail:
         return None, "empty_part"
-    emoji = head[0]
-    if emoji not in EMOJI_SET:
-        return None, f"bad_emoji({emoji!r})"
-    obj = head[1:].strip()
+    emoji, obj = match_category(head)
+    if emoji is None:
+        return None, f"bad_emoji({head[:2]!r})"
     if not obj:
         return None, "empty_object"
     normalized = f"{emoji} {obj}{SEPARATOR}{tail}"
